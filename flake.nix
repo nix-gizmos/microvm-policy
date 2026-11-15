@@ -154,6 +154,11 @@
           # The workspace guard in its opt-out shape: repoDepth + AppArmor,
           # existing and cloned-after-boot repositories, guarded vs opted out.
           workspace-guard = import ./tests/workspace-guard.nix { inherit pkgs lib; };
+          # The guest units a login waits for, read off the evaluated config.
+          login-ordering = import ./tests/login-ordering.nix {
+            inherit pkgs lib;
+            modules = [ self.nixosModules.default ];
+          };
         });
     };
 }
