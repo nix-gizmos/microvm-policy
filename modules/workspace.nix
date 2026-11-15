@@ -362,7 +362,9 @@ in
     systemd.services.work-ephemeral = {
       description = "Guest-side overlay over the workspace: writes never reach the host";
       after = [ (mountUnit work) ] ++ cfg.stateAfter;
-      before = [ "workspace-guard.service" "getty@hvc0.service" ];
+      # Before any login, on whatever terminal (each waits for
+      # systemd-user-sessions): the workload must find the overlay in place.
+      before = [ "workspace-guard.service" "systemd-user-sessions.service" ];
       wantedBy = [ "multi-user.target" ];
       # NixOS unit scripts default to coreutils/sed/grep on PATH — mount is
       # not among them. Found by the first real boot.
@@ -406,7 +408,11 @@ in
     systemd.services.workspace-guard = {
       description = "Read-only binds over workspace paths that execute on the host";
       after = [ (mountUnit work) ] ++ cfg.stateAfter ++ [ "work-ephemeral.service" ];
-      before = [ "getty@hvc0.service" ];
+      # Before any login, on whatever terminal (each waits for
+      # systemd-user-sessions, user@ included): the binds are up before the
+      # workload can write under them, and before the AppArmor-confined
+      # units, which order themselves after this.
+      before = [ "systemd-user-sessions.service" ];
       wantedBy = [ "multi-user.target" ];
       path = [ pkgs.util-linux ]; # mount — see work-ephemeral
       serviceConfig = {
@@ -443,18 +449,13 @@ in
     programs.git.enable = lib.mkDefault true;
     programs.git.config.init.templateDir = lib.mkDefault "${pkgs.runCommand "git-template-empty" { } "mkdir $out"}";
 
-    systemd.services = lib.mkMerge [
-      {
-        # The confined units must not start before the profile is loaded,
-        # and logins (user@) neither.
-        workspace-guard.before = [ "systemd-user-sessions.service" ];
-      }
-      (lib.genAttrs aa.units (_: {
-        wants = [ "workspace-guard.service" ];
-        after = [ "workspace-guard.service" ];
-        serviceConfig.AppArmorProfile = aa.profileName;
-      }))
-    ];
+    # The confined units must not start before the profile is loaded (logins
+    # neither, which workspace-guard's own ordering covers).
+    systemd.services = lib.genAttrs aa.units (_: {
+      wants = [ "workspace-guard.service" ];
+      after = [ "workspace-guard.service" ];
+      serviceConfig.AppArmorProfile = aa.profileName;
+    });
   })
   ];
 }

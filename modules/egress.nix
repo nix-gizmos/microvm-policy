@@ -176,7 +176,10 @@ in
       description = "Verify the sealed netdev and remove the blackholed resolver";
       after = [ "network-online.target" ] ++ cfg.stateAfter;
       wants = [ "network-online.target" ];
-      before = [ "getty@hvc0.service" ];
+      # Before any login, on whatever terminal: every login waits for
+      # systemd-user-sessions, so the workload never starts before the seal
+      # is checked.
+      before = [ "systemd-user-sessions.service" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
